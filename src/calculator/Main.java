@@ -3,65 +3,52 @@ package calculator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Stack;
 
 public class Main {
-    static void main(String[] args) {
+    public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         System.out.println("Smart calculator. Type /help for instructions.");
 
-        // Move HashMap outside the loop so it persists between inputs
         Map<String, Integer> variables = new HashMap<>();
 
         outerLoop:
         while (true) {
             String input = scanner.nextLine().trim();
-
             if (input.isEmpty()) continue;
 
             // Commands
             if (input.startsWith("/")) {
-                if (input.equals("/exit")) {
-                    System.out.println("Bye!");
-                    break;
-                } else if (input.equals("/help")) {
-                    System.out.println("The program calculates expressions with + and - operators.\n" +
-                            "Supports multiple consecutive operators (e.g., '--' → '+').\n" +
-                            "Supports variable assignment (e.g., 'a = 5' or 'b = a').\n" +
-                            "Invalid sequences like '+ +' or '+ -' are rejected.");
-                    continue;
-                } else {
-                    System.out.println("Unknown command");
-                    continue;
+                switch (input) {
+                    case "/exit":
+                        System.out.println("Bye!");
+                        break outerLoop;
+                    case "/help":
+                        System.out.println("Supports +, -, *, /, parentheses, multi-digit numbers, and variables.");
+                        continue;
+                    default:
+                        System.out.println("Unknown command");
+                        continue;
                 }
             }
 
-            // Handle variable assignment: var = value or var = otherVar
-            if (input.matches("^[a-zA-Z]+\\s*=\\s*(\\d+|[a-zA-Z][a-zA-Z0-9]*)$")) {
-                String[] parts = input.split("=");
+            // Variable assignment
+            if (input.matches("^[a-zA-Z]+\\s*=\\s*(-?\\d+|[a-zA-Z][a-zA-Z0-9]*)$")) {
+                String[] parts = input.split("=", 2);  // limit to 2 parts
                 String key = parts[0].trim();
                 String valueStr = parts[1].trim();
 
-                // Check if valueStr is a number
-                if (valueStr.matches("\\d+")) {
-                    int value = Integer.parseInt(valueStr);
-                    variables.put(key, value);
-//                    System.out.println(key + " = " + value);
+                if (valueStr.matches("-?\\d+")) {  // allow negative numbers
+                    variables.put(key, Integer.parseInt(valueStr));
+                } else if (variables.containsKey(valueStr)) {
+                    variables.put(key, variables.get(valueStr));
                 } else {
-                    // It's another variable name
-                    if (variables.containsKey(valueStr)) {
-                        int value = variables.get(valueStr);
-                        variables.put(key, value);
-//                        System.out.println(key + " = " + valueStr + " (" + value + ")");
-                    } else {
-                        System.out.println("Unknown variable: " + valueStr);
-                    }
+                    System.out.println("Unknown variable");
                 }
                 continue;
             }
 
-            // Handle variable lookup (single variable name)
+// Single variable lookup
             if (input.matches("^[a-zA-Z][a-zA-Z0-9]*$")) {
                 if (variables.containsKey(input)) {
                     System.out.println(variables.get(input));
@@ -71,50 +58,112 @@ public class Main {
                 continue;
             }
 
-            // Handle arithmetic expressions (may contain variables)
+            // Handle arithmetic expressions
             try {
-                // First, replace variable names with their values
-                String expressionWithValues = input;
+                // Replace variable names with values
+                String expression = input;
                 for (Map.Entry<String, Integer> entry : variables.entrySet()) {
-                    expressionWithValues = expressionWithValues.replaceAll("\\b" + entry.getKey() + "\\b",
-                            entry.getValue().toString());
+                    expression = expression.replaceAll("\\b" + entry.getKey() + "\\b", entry.getValue().toString());
                 }
 
-                // Remove all spaces and normalize operators
-                String normalized = expressionWithValues.replaceAll("\\s+", "")
-                        .replaceAll("--", "+")
-                        .replaceAll("\\+\\+", "+")
-                        .replaceAll("-\\+", "-")
-                        .replaceAll("\\+-", "-");
+                // Normalize operators
+                expression = expression.replaceAll("\\s+", ""); // remove spaces
 
-                // Validate the expression
-                if (!normalized.matches("^([+-]?\\d+[+-])*[+-]?\\d+$")) {
-                    System.out.println("Invalid expression");
-                    continue;
+                StringBuilder normalized = new StringBuilder();
+                int i = 0;
+                while (i < expression.length()) {
+                    char c = expression.charAt(i);
+                    if (c == '+' || c == '-') {
+                        int minusCount = 0;
+                        // Count consecutive + and -
+                        while (i < expression.length() && (expression.charAt(i) == '+' || expression.charAt(i) == '-')) {
+                            if (expression.charAt(i) == '-') minusCount++;
+                            i++;
+                        }
+                        // Even number of '-' -> '+', odd -> '-'
+                        normalized.append((minusCount % 2 == 0) ? '+' : '-');
+                    } else {
+                        normalized.append(c);
+                        i++;
+                    }
                 }
 
-                // Extract numbers with sign
-                Pattern tokenPattern = Pattern.compile("[+-]?\\d+");
-                Matcher tokenMatcher = tokenPattern.matcher(normalized);
+                expression = normalized.toString();      // '+' followed by one or more '-' → '-'
 
-                int total = 0;
-                boolean hasToken = false;
-                while (tokenMatcher.find()) {
-                    hasToken = true;
-                    total += Integer.parseInt(tokenMatcher.group());
+
+                // Convert to postfix
+                String postfix = infixToPostfix(expression);
+
+                // Evaluate postfix
+                String[] tokens = postfix.trim().split("\\s+");
+                Stack<Integer> stack = new Stack<>();
+                for (String token : tokens) {
+                    if (token.matches("-?\\d+")) {
+                        stack.push(Integer.parseInt(token));
+                    } else {
+                        int val1 = stack.pop();
+                        int val2 = stack.pop();
+                        switch (token) {
+                            case "+": stack.push(val2 + val1); break;
+                            case "-": stack.push(val2 - val1); break;
+                            case "*": stack.push(val2 * val1); break;
+                            case "/": stack.push(val2 / val1); break;
+                        }
+                    }
                 }
-
-                if (!hasToken) {
-                    System.out.println("Invalid input");
-                    continue;
-                }
-
-                System.out.println(total);
+                System.out.println(stack.pop());
 
             } catch (Exception e) {
                 System.out.println("Invalid expression");
             }
         }
         scanner.close();
+    }
+
+    // Infix to Postfix with spaces between tokens
+    public static String infixToPostfix(String infix) {
+        StringBuilder postfix = new StringBuilder();
+        Stack<Character> stk = new Stack<>();
+
+        for (int i = 0; i < infix.length(); i++) {
+            char c = infix.charAt(i);
+
+            if (Character.isDigit(c)) {
+                // Multi-digit number
+                while (i < infix.length() && Character.isDigit(infix.charAt(i))) {
+                    postfix.append(infix.charAt(i));
+                    i++;
+                }
+                postfix.append(' ');
+                i--;
+            } else if (c == '(') {
+                stk.push(c);
+            } else if (c == ')') {
+                while (!stk.isEmpty() && stk.peek() != '(') {
+                    postfix.append(stk.pop()).append(' ');
+                }
+                stk.pop(); // remove '('
+            } else { // operator
+                while (!stk.isEmpty() && precedence(stk.peek()) >= precedence(c)) {
+                    postfix.append(stk.pop()).append(' ');
+                }
+                stk.push(c);
+            }
+        }
+
+        while (!stk.isEmpty()) {
+            postfix.append(stk.pop()).append(' ');
+        }
+
+        return postfix.toString();
+    }
+
+    // Operator precedence
+    public static int precedence(char op) {
+        switch (op) {
+            case '+': case '-': return 1;
+            case '*': case '/': return 2;
+            default: return 0;
+        }
     }
 }
