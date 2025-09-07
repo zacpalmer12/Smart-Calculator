@@ -1,16 +1,14 @@
 package calculator;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Scanner;
-import java.util.Stack;
+import java.math.BigInteger;
+import java.util.*;
 
 public class Main {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         System.out.println("Smart calculator. Type /help for instructions.");
 
-        Map<String, Integer> variables = new HashMap<>();
+        Map<String, BigInteger> variables = new HashMap<>();
 
         outerLoop:
         while (true) {
@@ -34,12 +32,12 @@ public class Main {
 
             // Variable assignment
             if (input.matches("^[a-zA-Z]+\\s*=\\s*(-?\\d+|[a-zA-Z][a-zA-Z0-9]*)$")) {
-                String[] parts = input.split("=", 2);  // limit to 2 parts
+                String[] parts = input.split("=", 2);
                 String key = parts[0].trim();
                 String valueStr = parts[1].trim();
 
-                if (valueStr.matches("-?\\d+")) {  // allow negative numbers
-                    variables.put(key, Integer.parseInt(valueStr));
+                if (valueStr.matches("-?\\d+")) {
+                    variables.put(key, new BigInteger(valueStr));
                 } else if (variables.containsKey(valueStr)) {
                     variables.put(key, variables.get(valueStr));
                 } else {
@@ -48,7 +46,7 @@ public class Main {
                 continue;
             }
 
-// Single variable lookup
+            // Single variable lookup
             if (input.matches("^[a-zA-Z][a-zA-Z0-9]*$")) {
                 if (variables.containsKey(input)) {
                     System.out.println(variables.get(input));
@@ -60,27 +58,25 @@ public class Main {
 
             // Handle arithmetic expressions
             try {
-                // Replace variable names with values
+                // Replace variables with values
                 String expression = input;
-                for (Map.Entry<String, Integer> entry : variables.entrySet()) {
+                for (Map.Entry<String, BigInteger> entry : variables.entrySet()) {
                     expression = expression.replaceAll("\\b" + entry.getKey() + "\\b", entry.getValue().toString());
                 }
 
-                // Normalize operators
                 expression = expression.replaceAll("\\s+", ""); // remove spaces
 
+                // Normalize + and -
                 StringBuilder normalized = new StringBuilder();
                 int i = 0;
                 while (i < expression.length()) {
                     char c = expression.charAt(i);
                     if (c == '+' || c == '-') {
                         int minusCount = 0;
-                        // Count consecutive + and -
                         while (i < expression.length() && (expression.charAt(i) == '+' || expression.charAt(i) == '-')) {
                             if (expression.charAt(i) == '-') minusCount++;
                             i++;
                         }
-                        // Even number of '-' -> '+', odd -> '-'
                         normalized.append((minusCount % 2 == 0) ? '+' : '-');
                     } else {
                         normalized.append(c);
@@ -88,26 +84,25 @@ public class Main {
                     }
                 }
 
-                expression = normalized.toString();      // '+' followed by one or more '-' → '-'
-
+                expression = normalized.toString();
 
                 // Convert to postfix
                 String postfix = infixToPostfix(expression);
 
                 // Evaluate postfix
                 String[] tokens = postfix.trim().split("\\s+");
-                Stack<Integer> stack = new Stack<>();
+                Stack<BigInteger> stack = new Stack<>();
                 for (String token : tokens) {
                     if (token.matches("-?\\d+")) {
-                        stack.push(Integer.parseInt(token));
+                        stack.push(new BigInteger(token));
                     } else {
-                        int val1 = stack.pop();
-                        int val2 = stack.pop();
+                        BigInteger val1 = stack.pop();
+                        BigInteger val2 = stack.pop();
                         switch (token) {
-                            case "+": stack.push(val2 + val1); break;
-                            case "-": stack.push(val2 - val1); break;
-                            case "*": stack.push(val2 * val1); break;
-                            case "/": stack.push(val2 / val1); break;
+                            case "+": stack.push(val2.add(val1)); break;
+                            case "-": stack.push(val2.subtract(val1)); break;
+                            case "*": stack.push(val2.multiply(val1)); break;
+                            case "/": stack.push(val2.divide(val1)); break;
                         }
                     }
                 }
@@ -120,7 +115,7 @@ public class Main {
         scanner.close();
     }
 
-    // Infix to Postfix with spaces between tokens
+    // Infix to Postfix
     public static String infixToPostfix(String infix) {
         StringBuilder postfix = new StringBuilder();
         Stack<Character> stk = new Stack<>();
@@ -129,7 +124,6 @@ public class Main {
             char c = infix.charAt(i);
 
             if (Character.isDigit(c)) {
-                // Multi-digit number
                 while (i < infix.length() && Character.isDigit(infix.charAt(i))) {
                     postfix.append(infix.charAt(i));
                     i++;
@@ -142,7 +136,7 @@ public class Main {
                 while (!stk.isEmpty() && stk.peek() != '(') {
                     postfix.append(stk.pop()).append(' ');
                 }
-                stk.pop(); // remove '('
+                stk.pop();
             } else { // operator
                 while (!stk.isEmpty() && precedence(stk.peek()) >= precedence(c)) {
                     postfix.append(stk.pop()).append(' ');
@@ -158,7 +152,6 @@ public class Main {
         return postfix.toString();
     }
 
-    // Operator precedence
     public static int precedence(char op) {
         switch (op) {
             case '+': case '-': return 1;
